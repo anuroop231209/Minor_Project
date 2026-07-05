@@ -1,5 +1,6 @@
 import os
 import datetime
+import contextlib
 import pymysql
 import pandas as pd
 
@@ -18,16 +19,25 @@ DB_CONFIG = {
 }
 
 
-try:
-    connection = pymysql.connect(**DB_CONFIG)
-    print("Connected to MySQL successfully")
+# Database Connection Utilities
+@contextlib.contextmanager
 
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT DATABASE();")
-        result=cursor.fetchone()
-        print(result)
+def db_connection():
+    conn = pymysql.connect(**DB_CONFIG)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
-        connection.close()
-
-except Exception as e:
-    print("Error:",e)
+@contextlib.contextmanager
+def db_cursor():
+    with db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            yield cursor
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally
+            cursor.close()
