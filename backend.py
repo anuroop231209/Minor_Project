@@ -41,3 +41,5 @@ def db_cursor():
             raise
         finally
             cursor.close()
+
+#Database Setup
