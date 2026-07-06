@@ -39,7 +39,38 @@ def db_cursor():
         except Exception:
             conn.rollback()
             raise
-        finally
+        finally:
             cursor.close()
 
 #Database Setup
+
+
+
+
+#PDF and Image Processing
+def extract_text_from_pdf(file_path: str) -> str:
+    try:
+        reader=PdfReader(file_path)
+
+        text=""
+
+        for page in reader.pages:
+            page_text=page.extract_text()
+
+            if page_text:
+                text+=page_text + "\n"
+
+        return text
+    
+    except Exception as e:
+        print("Error",e)
+        return""
+
+        
+if __name__ == "__main__":
+    pdf_path= "Uploaded_Resumes/2.pdf"
+
+    text=extract_text_from_pdf(pdf_path)
+
+    print("==Resume Text")
+    print(text)
