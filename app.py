@@ -201,8 +201,45 @@ def display_work_experience(analysis):
             key = f"{job_title}_{company}_{start}-{end}"
             if key  not in seen:
                 seen.add(key)
+                with st.expander(f"{job_title} at {company}" ,expanded=false):
+                    col1, col2 = st.columns(1,3)
+                    with col1:
+                        st.markdown(f"**Period(time period):** \n{start} - {end}")
+                    with col2:
+                        st.markdown(f"**Responsibilities:** \n{desc}")
+                st.markdown("---")  # Add a horizontal line between experiences
                
 
+def display_wordcloud(resume_text):
+    """Generate and display word cloud wth improved styling."""
+with stylable_container(
+        key="wordcloud",
+        css_style="""{
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            margin-bottom: 1.5rem;
+            background: white;
+       } """
+       ):
+        st.subheader("Resume Keywords cloud")
+
+        if resume_text.strip():
+            with st.spinner("Generating word cloud..."):
+                wc_img = generate_wordcloud(resume_text)
+                st.image(wc_img, caption=" Most frequent keywords from your resume", use_column_width=True)
+
+        else:
+            st.warning("No text found in the resume to generate a word cloud.")
+
+        
+def process_resume(file_path: str) -> Tuple[Optional[dict], Optional[ str]]:
+    """Process the resume and return analysis or error ."""
+    with st.spinner("Analyzing resume content.."):
+        resume_text = extract_text_from_file(file_path)
+
+        #if resume text is empty, return error or too short gow error and a
+            
 
 
 
