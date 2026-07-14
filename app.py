@@ -5,7 +5,7 @@ import base64
 import streamlit as st
 from streamlit_lottie import  st_lottie
 
-from typing import optional , Tuple, Dict, Any
+from typing import Optional , Tuple, Dict, Any
 import requests
 import pandas as pd
 import plotly.express as px
@@ -78,7 +78,7 @@ def save_uploaded_file(uploaded_file) -> Optional[str]:
 
 def display_candidate_info(analysis):
     """Dsiplay candidate infromation (basic) with improved styling """
-    with Stylable_container(
+    with stylable_container(
         key="candidate_info",
         css_style="""
             border: 2px solid #4CAF50;
@@ -129,4 +129,57 @@ def display_skills(analysis):
                     skills = [skills]
             if isinstance(skills, list):
                 st.markdown(", ".join([skill.strip() for skill in skills if skill]) or "NA")
-                
+
+            else:
+                st.markdown(str(skills) if str(skills).strip() else "NA")
+
+def display_degree(analysis):
+    """Display degree section above work experience."""
+    with stylable_container(
+        key="degree_section",
+        css_style="""
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            background: white;
+        """
+    ):
+        st.subheader("Degree")
+        degree = analysis.get('degree', 'N/A')
+        #if degree is string , try to parse as list if it looks like a list
+        if isinstance(degree, str):
+            import ast
+            try:
+                degree_eval = ast.literal_eval(degree)
+                if isinstance(degree_eval, list):
+                    degree = degree_eval
+                   
+            except Exception:
+                pass
+        #Display logic for list or string 
+        if not degree or (isinstance(degree, str) and not degree.strip().lower() in ['na', 'none', 'null','']):
+            st.markdown("NA")
+        elif isinstance(degree, list):
+            degree_list = [str(d) for d in degree if d and str (d).strip().lower() not in ['na', 'none', 'null',''] ]
+            st.markdown("**Degrees:** " + ", ".join(degree_list) if degree_list else "NA")
+        else:
+            st.markdown("**Degree:** " + {degree  if str(degree).strip() else "NA"})
+
+
+def display_work_experience(analysis):
+    """ Display work experience section with improved styling."""
+    with stylable_container(
+        key="work_exp",
+        css_style={"""
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            margin-bottom: 1.5rem;
+            background: white;
+        """
+        }
+        
+        ):
+        st.subheader("Work Experience")
+        
+    
