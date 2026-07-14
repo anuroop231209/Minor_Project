@@ -89,4 +89,44 @@ def display_candidate_info(analysis):
             background: white;
         """
     ):
+        st.subheader("Candidate Information")
+        name = analysis.get('name', 'N/A')
+        email = analysis.get('email', 'N/A')
+        phone = analysis.get('phone', 'N/A')
+        col1, col2 ,col3 = st.columns(3)
+        with col1:
+            st.markdown(f"**Name:** ")
+            st.info(name if name.strip() else "N/A")
+        with col2:
+            st.markdown(f"**Email:** ")
+            st.info(email if email.strip() else "N/A")
+        with col3:
+            st.markdown(f"**Phone:** ")
+            st.info(phone if phone.strip() else "N/A")
         
+def display_skills(analysis):
+    """Display skills section above work experience."""
+    with stylable_container(
+        key="skills_section",
+        css_style="""
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            margin-bottom: 1.5rem;
+            background: white;
+        """
+    ):
+        st.subheader("Skills")
+        skills = analysis.get('skills', [])
+        if not skills or(isinstance(skills, str) and not skills.strip()):
+            st.markdown("NA")
+        else:
+            if isinstance(skills, str):
+                import ast
+                try:
+                    skills = ast.literal_eval(skills)
+                except Exception as e:
+                    skills = [skills]
+            if isinstance(skills, list):
+                st.markdown(", ".join([skill.strip() for skill in skills if skill]) or "NA")
+                
