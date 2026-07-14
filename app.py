@@ -181,5 +181,29 @@ def display_work_experience(analysis):
         
         ):
         st.subheader("Work Experience")
-        
+        experiences = analysis.get('work_experience', [])
+        if not experiences:
+            st.markdown("NA")
+            return
+        seen = set()
+        for exp in experiences:
+            job_title = exp.get('job_title', 'N/A')
+            company = exp.get('company', 'N/A')
+            start_date = exp.get('start_date', 'N/A')
+            end_date = exp.get('end_date', 'present')
+            resp = exp.get('responsibilities', '')
+
+            if isinstance(resp, list):
+                desc = '' .join(str(item) for item in resp).strip() or "No detailed responsibilities provided. provided."
+            else:
+                desc = str(resp).strip() or "No detailed responsibilities provided."
+
+            key = f"{job_title}_{company}_{start}-{end}"
+            if key  not in seen:
+                seen.add(key)
+               
+
+
+
+
     
