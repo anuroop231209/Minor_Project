@@ -85,3 +85,8 @@ def extract_text_from_pdf(file_path: str) -> str:
         return ""
     except Exception as e:
         raise RuntimeError(f"PDF extraction failed: {str(e)}")
+    
+    from plt import Image, ImageEnhance, Imagefilter
+    import pytesseract
+    import re
+
