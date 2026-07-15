@@ -238,8 +238,33 @@ def process_resume(file_path: str) -> Tuple[Optional[dict], Optional[ str]]:
     with st.spinner("Analyzing resume content.."):
         resume_text = extract_text_from_file(file_path)
 
-        #if resume text is empty, return error or too short gow error and a
-            
+        #if resume text is empty, return error or too short shoow error 
+
+        f not resume_text or len(resume_text.strip()) < 30:
+        st.error("Could not extract usable text from this file. If this is a scanned image or low-quality photo, please upload a higher quality scan or a text-based PDF.")
+        st.info(f"Extracted text (debug, first 1000 chars):\n{resume_text[:1000]}")
+        return None, "Text extraction failed: insufficient content."
+        
+        # Reset extraction attempts counter
+        st.session_state.extraction_attempts = 0
+        
+        # Try extraction with progressively more detailed prompts
+        analysis = None
+        error = None
+        
+        while not analysis and st.session_state.extraction_attempts < 3:
+            st.session_state.extraction_attempts += 1
+            analysis = llama3_extract_resume_info(resume_text, st.session_state.extraction_attempts)
+
+            # Improved robust JSON extraction using extract_first_json and fallback cleaning
+            if not isinstance(analysis, dict):
+                import json, re
+                from model.model import extract_first_json
+                parsed = extract_first_json(analysis)
+                if parsed is not None:
+                    analysis = parsed
+                else:
+
 
 
 
