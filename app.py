@@ -240,9 +240,11 @@ def process_resume(file_path: str) -> Tuple[Optional[dict], Optional[ str]]:
 
         #if resume text is empty, return error or too short shoow error 
 
-        f not resume_text or len(resume_text.strip()) < 30:
-        st.error("Could not extract usable text from this file. If this is a scanned image or low-quality photo, please upload a higher quality scan or a text-based PDF.")
+        if not resume_text or len(resume_text.strip()) < 30:
+         st.error("Could not extract usable text from this file. If this is a scanned image or low-quality photo, please upload a higher quality scan or a text-based PDF.")
         st.info(f"Extracted text (debug, first 1000 chars):\n{resume_text[:1000]}")
+        
+
         return None, "Text extraction failed: insufficient content."
         
         # Reset extraction attempts counter
@@ -264,6 +266,103 @@ def process_resume(file_path: str) -> Tuple[Optional[dict], Optional[ str]]:
                 if parsed is not None:
                     analysis = parsed
                 else:
+                    #try to extravt the largest JSON Substring
+                    json_start = analysis.find('{')
+                    json_end = analysis.rfind('}')
+                    if json_start != -1 and json_end != -1 and json_end > json_start:
+                        json_str = analysis[json_start:json_end + 1]
+                        json_str = json_str.replace('\t', ' ').replace('\r', ' ').replace('\n', ' ')
+
+                        json_str = re.sub(r',\s*}', '}', json_str)  # Remove newlines, tabs, etc.
+                        json_str = re.sub(r',\s*]', ']', json_str)  # Remove trailing commas before closing brackets
+                        try:
+                            analysis = json.loads(json_str)
+                        except Exception :
+                            st.warning("Raw model output (for debugging):\n{analysis}")
+                            return {"Raw_output": str(analysis)}, "JSON parsing failed: Could not parse model output into valid JSON."
+                    else:
+                        try:
+                            analysis = json.loads(analysis)
+                        except Exception:
+                            st.warning(f"Raw model output (for debugging):\n{analysis}")
+                            return {"raw_output": str(analysis)}, "Could not parse structured data from model output"
+            if 'raw_output' in analysis:
+                st.warning(f"Raw model output (for debugging):\n{analysis}")
+                return analysis, "Could not parse structured data from model output"
+            
+            # Validate required fields
+            required_fields = ['name', 'email', 'phone', 'skills', 'experiences']
+            missing_fields = [field for field in required_fields if not analysis.get(field)]
+
+            # If any required fields are missing, fill them with N/A or [] and proceed with a warning
+            if missing_fields:
+                for field in missing_fields:
+                    if field in ['skills', 'experiences', 'degree', 'universities']:
+                        analysis[field] = []
+                    else:
+                        analysis[field] = "N/A"
+                st.warning(f"Some information could not be extracted from your resume: {', '.join(missing_fields)}. These fields have been set to N/A or left blank.")
+                break
+
+            # If we have a valid analysis, break the loop
+            if analysis:
+                break
+                
+        if not analysis:
+            return None, error or "Resume analysis failed after multiple attempts"
+            
+        # Calculate score and save to DB
+        st.session_state.resume_score = calculate_resume_score(analysis)
+        st.session_state.analysis_done = True
+        
+        ts = time.time()
+        timestamp = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H:%M:%S')
+        
+        insert_resume_data(
+            name=analysis.get('name', 'N/A'),
+            email=analysis.get('email', 'N/A'),
+            score=st.session_state.resume_score,
+            timestamp=timestamp,
+            candidate_level=analysis.get('cand_level', 'N/A'),
+            Experience=str(analysis.get('experiences', [])),
+            Skill=str(analysis.get('skills', [])),
+        )
+        
+        return analysis, None
+    
+def calculate_resume_score(analysis: dict) -> float:
+    """Calculate resume score from analysis using degree, skills, and experience."""
+    # If all key fields are NA/empty, return 0
+    degree = analysis.get('degree', '')
+    skills = analysis.get('skills', [])
+    experiences = analysis.get('experiences', [])
+    degree_na = (not degree or (isinstance(degree, str) and degree.strip().lower() in ['n/a', 'na', 'none', 'null', '']) or (isinstance(degree, list) and not any(str(d).strip() and str(d).strip().lower() not in ['n/a', 'na', 'none', 'null', ''] for d in degree)))
+    skills_na = (not skills or (isinstance(skills, str) and skills.strip().lower() in ['n/a', 'na', 'none', 'null', '']) or (isinstance(skills, list) and not any(str(s).strip() and str(s).strip().lower() not in ['n/a', 'na', 'none', 'null', ''] for s in skills)))
+    experiences_na = (not experiences or (isinstance(experiences, list) and not experiences))
+    if degree_na and skills_na and experiences_na:
+        return 0.0
+    score_text = str(analysis.get('summary', '')) + ' '
+    # Add degree
+    if degree and degree != 'N/A':
+        score_text += str(degree) + ' '
+    # Add skills
+    if isinstance(skills, list):
+        score_text += ' '.join([str(skill) for skill in skills if skill]) + ' '
+    elif isinstance(skills, str) and skills.strip():
+        score_text += skills.strip() + ' '
+    # Add experience responsibilities
+    responsibilities_list = []
+    for exp in experiences:
+        resp = exp.get('responsibilities', '')
+        if isinstance(resp, list):
+            responsibilities_list.append(' '.join(str(item) for item in resp))
+        else:
+            responsibilities_list.append(str(resp))
+    score_text += ' '.join(responsibilities_list)
+    return bilstm_score_resume(score_text) * 100
+
+            
+
 
 
 
