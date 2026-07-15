@@ -59,3 +59,12 @@ def extract_text_from_pdf(file_path: str) -> str:
         ).strip()
         if pypdf2_text and len(pypdf2_text)>30:
             return pypdf2_text
+        
+        #2. Try pdfminer.six
+        try:
+            from pdfminer.high_level import extract_text as pdfminer_extract_text
+            pdfminer_text=pdfminer_extract_text(file_path)
+            if pdfminer_text and len(pdfminer_text)>30:
+                return pdfminer_text
+        except Exception:
+            pass
