@@ -68,3 +68,20 @@ def extract_text_from_pdf(file_path: str) -> str:
                 return pdfminer_text
         except Exception:
             pass
+
+        # 3. Fallback: OCR only if both extractors fail
+        try:
+            from pdf2image import convert_from_path
+            import pytesseract
+            images = convert_from_path(file_path)
+            ocr_text = ""
+            for img in images:
+                ocr_text += pytesseract.image_to_string(img, lang='eng') + "\n"
+            ocr_text = ocr_text.strip()
+            if ocr_text and len(ocr_text) > 30:
+                return ocr_text
+        except Exception:
+            pass
+        return ""
+    except Exception as e:
+        raise RuntimeError(f"PDF extraction failed: {str(e)}")
