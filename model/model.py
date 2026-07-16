@@ -23,6 +23,7 @@ LLAMA3_EXTRACTION_PROMPT_TEMPLATES = [
     Required JSON structure:
     {
         "name": "",
+
         
     }
 
