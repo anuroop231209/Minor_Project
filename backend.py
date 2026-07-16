@@ -43,6 +43,26 @@ def db_cursor():
             cursor.close()
 
 #Database Setup
+def setup_databse():
+    with db_cursor() as cursor:
+        cursor.execute("CREATE DATABSE IF NOT EXITS candidates;")
+        cursor.execute("USE candidate;")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_data(
+                       ID INT  NOT NULL AUTO_INCREMENT,
+                       Name VARCHAR(500) NULL,
+                       Email_ID VARCHAR(500) NULL,
+                       Score FLOAT NULL,
+                       Timestamp VARCHAR(50) NULL,
+                       `candidate level` VARCHAR(50) NULL,
+                       Experience TEXT NULL,
+                       skill TEXT NULL,
+                       PRIMARY KEY (ID)
+                       );
+
+        """)
+        
+    
 
 
 
