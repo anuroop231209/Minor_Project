@@ -61,13 +61,36 @@ def setup_databse():
                        );
 
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS candidate_users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL
+            );
+        """)
+# Initialize database on import
+setup_database()
+
+# --- Security Utilities ---
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+# --- File Hashing Utility ---
+def hash_file(file_path: str) -> str:
+    """Return the SHA256 hash of the file at file_path."""
+    import hashlib
+    BUF_SIZE = 65536
+    sha256 = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        while True:
+            data = f.read(BUF_SIZE)
+            if not data:
+                break
+            sha256.update(data)
+    return sha256.hexdigest()
+
         
-    
-
-
-
-
-#PDF and Image Processing
+    #PDF and Image Processing
 def extract_text_from_pdf(file_path: str) -> str:
     try:
         # 1.Try PyPDF2
