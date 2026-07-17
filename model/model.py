@@ -262,3 +262,69 @@ def parse_experiences(experiences: List[Dict]) -> List[Dict]:
         })
         
     return parsed
+
+def extract_individual_fields(resume_text: str) -> Dict[str, Any]:
+    """Fallback method: extract each field individually with specialized prompts."""
+    fields = {
+        "name": "Extract the candidate's full name from the resume text. Respond ONLY with the name itself, no explanations, no extra text, no context, no labels, no markdown, no comments. If not found, respond with N/A only.",
+        "email": "Extract the candidate's email address from the resume text. Respond ONLY with the email itself, no explanations, no extra text, no context, no labels, no markdown, no comments. If not found, respond with N/A only.",
+        "phone": "Extract the candidate's phone number from the resume text. Respond ONLY with the phone number itself, no explanations, no extra text, no context, no labels, no markdown, no comments. If not found, respond with N/A only.",
+        "skills": "Extract the candidate's skills as a JSON list from the resume text. Respond ONLY with a JSON list of strings, no explanations, no extra text, no context, no labels, no markdown, no comments.",
+        "summary": "Extract a professional summary from the resume text. Respond ONLY with a string of 2-3 sentences, no explanations, no extra text, no context, no labels, no markdown, no comments.",
+    }
+    
+    result = {}
+    for field, prompt in fields.items():
+        full_prompt = f"{prompt}\n\nResume Text:\n{resume_text}\n\nOutput:"
+        response = llama3_infer(full_prompt, temperature=0.1)
+        
+        # Clean response
+        response = response.strip().replace('"', '').replace("'", "")
+        
+        # Special handling for skills
+        if field == "skills":
+            try:
+                if response.startswith('[') and response.endswith(']'):
+                    skills = json.loads(response)
+                else:
+                    skills = [s.strip() for s in response.split(',') if s.strip()]
+                result[field] = skills
+            except:
+                result[field] = []
+        else:
+            result[field] = response if response and response != 'N/A' else ""
+    
+    # Set default values for missing complex fields
+    result['degree'] = []
+    result['universities'] = []
+    result['years_experience'] = ""
+    result['experiences'] = []
+
+    # --- Regex-based fallback for critical fields ---
+    # Email
+    if not result.get('email') or result['email'].strip().lower() in ["n/a", "", "none", "null"]:
+        email_match = re.search(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", resume_text)
+        if email_match:
+            result['email'] = email_match.group(0)
+        else:
+            result['email'] = "N/A"
+    # Phone
+    if not result.get('phone') or result['phone'].strip().lower() in ["n/a", "", "none", "null"]:
+        phone_match = re.search(r"(\+?\d[\d\s\-()]{7,}\d)", resume_text)
+        if phone_match:
+            result['phone'] = phone_match.group(0)
+        else:
+            result['phone'] = "N/A"
+    # Name (very basic fallback: first capitalized words at top)
+    if not result.get('name') or result['name'].strip().lower() in ["n/a", "", "none", "null"]:
+        # Try to find a likely name in the first 10 lines
+        lines = resume_text.splitlines()
+        for line in lines[:10]:
+            line = line.strip()
+            if len(line.split()) >= 2 and all(w[0].isupper() for w in line.split() if w):
+                result['name'] = line
+                break
+        if not result.get('name') or result['name'].strip() == "":
+            result['name'] = "N/A"
+    
+    return result
