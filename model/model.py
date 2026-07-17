@@ -229,3 +229,36 @@ def validate_resume_json(data: Dict) -> bool:
             
     return True
     
+def parse_experiences(experiences: List[Dict]) -> List[Dict]:
+    """Normalize and clean experiences data."""
+    parsed = []
+    for exp in experiences:
+        # Normalize dates
+        start_date = exp.get('start_date', '')
+        end_date = exp.get('end_date', 'Present')
+        
+        # Extract year from dates
+        if start_date:
+            year_match = re.search(r'\d{4}', start_date)
+            if year_match:
+                start_date = year_match.group(0)
+                
+        if end_date and end_date != 'Present':
+            year_match = re.search(r'\d{4}', end_date)
+            if year_match:
+                end_date = year_match.group(0)
+                
+        # Clean responsibilities
+        responsibilities = exp.get('responsibilities', '')
+        if isinstance(responsibilities, list):
+            responsibilities = ' '.join(responsibilities)
+            
+        parsed.append({
+            'job_title': exp.get('job_title', ''),
+            'company': exp.get('company', ''),
+            'start_date': start_date,
+            'end_date': end_date,
+            'responsibilities': responsibilities[:500]  # Limit length
+        })
+        
+    return parsed
