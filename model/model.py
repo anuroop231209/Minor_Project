@@ -4,6 +4,13 @@ import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
 import numpy as np
+from torch.utils.data import Dataset, DataLoader
+import re
+import requests
+import json
+import logging
+import time
+from typing import Dict, Any, List, Optional
 
 
 #Enhanced Prompt Templates
@@ -111,3 +118,25 @@ LLAMA3_EXTRACTION_PROMPT_TEMPLATES = [
     """
 ]
 
+def llama_infer(prompt: str, n_predict: int =1024, temperature: float=0.2)->str:
+    headers = {"Content-Type": "application/json"}
+    data = {
+        "model": LMSTUDIO_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": n_predict,
+        "temperature": temperature,
+        "stop": ["</s>", "```"]
+    }
+    try:
+        start_time = time.time()
+        response = requests.post(LMSTUDIO_API_URL, headers=headers, json=data, timeout=180)
+        response.raise_for_status()
+        result = response.json()
+        content = result["choices"][0]["message"]["content"]
+        elapsed = time.time() - start_time
+        logging.info(f"Llama inference completed in {elapsed:.2f}s, tokens: {len(content.split())}")
+        return content
+    except Exception as e:
+        logging.error(f"LM Studio API call failed: {e}")
+        return f"[ERROR] LM Studio API call failed: {e}"
+    
