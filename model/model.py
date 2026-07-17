@@ -192,4 +192,40 @@ def extract_first_json(text: str) -> Optional[Dict]:
         logging.warning(f"JSON parsing failed: {e}")
         return None
 
+def validate_resume_json(data: Dict) -> bool:
+    """Validate the structure and content of extracted resume data."""
+    if not isinstance(data, dict):
+        return False
+        
+    # Check required fields
+    required = ['name', 'email', 'skills', 'experiences']
+    if any(field not in data for field in required):
+        return False
+        
+    # Check data types
+    if not isinstance(data.get('skills', []), list):
+        return False
+    if not isinstance(data.get('experiences', []), list):
+        return False
+        
+    # Check name field
+    if not data.get('name') or not isinstance(data['name'], str) or len(data['name'].strip()) < 2:
+        return False
+        
+    # Check email format
+    email = data.get('email', '')
+    if isinstance(email, list):
+        # If email is a list, try to extract the first string
+        email = email[0] if email and isinstance(email[0], str) else ''
+    if email and isinstance(email, str) and not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        return False
+        
+    # Check experiences structure
+    for exp in data.get('experiences', []):
+        if not isinstance(exp, dict):
+            return False
+        if 'job_title' not in exp or 'company' not in exp:
+            return False
+            
+    return True
     
