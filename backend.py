@@ -1,14 +1,17 @@
 import os
+import io
+import base64
+import hashlib
 import datetime
 import contextlib
 import pymysql
 import pandas as pd
-
+from PIL import Image
+from wordcloud import WordCloud
 from PyPDF2 import PdfReader
+from typing import Optional, Tuple, Dict, Any, List
 
-
-#Configuration
-
+# --- Configuration ---
 DB_CONFIG = {
     'host': 'localhost',
     'user': 'AnuroopTater',
@@ -18,10 +21,8 @@ DB_CONFIG = {
     'cursorclass': pymysql.cursors.DictCursor
 }
 
-
-# Database Connection Utilities
+# --- Database Connection Utilities ---
 @contextlib.contextmanager
-
 def db_connection():
     conn = pymysql.connect(**DB_CONFIG)
     try:
@@ -42,24 +43,23 @@ def db_cursor():
         finally:
             cursor.close()
 
-#Database Setup
-def setup_databse():
+# --- Database Setup ---
+def setup_database():
     with db_cursor() as cursor:
-        cursor.execute("CREATE DATABSE IF NOT EXITS candidates;")
+        cursor.execute("CREATE DATABASE IF NOT EXISTS candidate;")
         cursor.execute("USE candidate;")
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS user_data(
-                       ID INT  NOT NULL AUTO_INCREMENT,
-                       Name VARCHAR(500) NULL,
-                       Email_ID VARCHAR(500) NULL,
-                       Score FLOAT NULL,
-                       Timestamp VARCHAR(50) NULL,
-                       `candidate level` VARCHAR(50) NULL,
-                       Experience TEXT NULL,
-                       skill TEXT NULL,
-                       PRIMARY KEY (ID)
-                       );
-
+            CREATE TABLE IF NOT EXISTS user_data (
+                ID INT NOT NULL AUTO_INCREMENT,
+                Name VARCHAR(500) NULL,
+                Email_ID VARCHAR(500) NULL,
+                Score FLOAT NULL,
+                Timestamp VARCHAR(50) NULL,
+                `Candidate level` VARCHAR(50) NULL,
+                Experience TEXT NULL,
+                Skill TEXT NULL,
+                PRIMARY KEY (ID)
+            );
         """)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS candidate_users (
@@ -68,6 +68,7 @@ def setup_databse():
                 password_hash VARCHAR(255) NOT NULL
             );
         """)
+
 # Initialize database on import
 setup_database()
 
@@ -90,7 +91,7 @@ def hash_file(file_path: str) -> str:
     return sha256.hexdigest()
 
         
-    #PDF and Image Processing
+#PDF and Image Processing
 def extract_text_from_pdf(file_path: str) -> str:
     try:
         # 1.Try PyPDF2
@@ -129,7 +130,83 @@ def extract_text_from_pdf(file_path: str) -> str:
     except Exception as e:
         raise RuntimeError(f"PDF extraction failed: {str(e)}")
     
-    from plt import Image, ImageEnhance, Imagefilter
-    import pytesseract
-    import re
+from plt import Image, ImageEnhance, Imagefilter
+import pytesseract
+import re
+
+def extract_text_from_file(file_path: str) -> str:
+    import cv2
+    import numpy as np
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".pdf":
+        return extract_text_from_pdf(file_path)
+    elif ext in [".jpg", ".jpeg", ".png"]:
+        try:
+            img = Image.open(file_path)
+            # Upscale if small
+            if min(img.size) < 1000:
+                scale = 2 if min(img.size) > 500 else 3
+                img = img.resize((img.width * scale, img.height * scale), Image.LANCZOS)
+            # Grayscale
+            img = img.convert('L')
+            # Convert to OpenCV for advanced processing
+            img_cv = np.array(img)
+            # Adaptive thresholding
+            img_cv = cv2.adaptiveThreshold(img_cv, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+            # Denoising
+            img_cv = cv2.fastNlMeansDenoising(img_cv, None, 30, 7, 21)
+            # Convert back to PIL
+            img = Image.fromarray(img_cv)
+            # Sharpen
+            img = img.filter(ImageFilter.SHARPEN)
+            # Try all psm modes (0-13) and select the best result
+            best_text = ""
+            best_len = 0
+            all_psm_texts = []
+            for psm in range(0, 14):
+                config = f'--oem 3 --psm {psm}'
+                try:
+                    text = pytesseract.image_to_string(img, lang='eng', config=config)
+                except Exception:
+                    text = ""
+                all_psm_texts.append((psm, text))
+                if text and len(text) > best_len:
+                    best_text = text
+                    best_len = len(text)
+            # Optionally, combine all unique lines from all PSMs
+            all_lines = set()
+            for _, t in all_psm_texts:
+                for line in t.splitlines():
+                    if line.strip():
+                        # Clean common OCR email/phone errors
+                        line = line.replace(' @ ', '@').replace(' . ', '.').replace(' (at) ', '@').replace(' [at] ', '@')
+                        line = line.replace(' dot ', '.').replace(' [dot] ', '.')
+                        all_lines.add(line.strip())
+            # Merge lines and remove duplicates
+            merged = "\n".join(sorted(all_lines))
+            # Remove non-ASCII and excessive whitespace
+            merged = re.sub(r'[^\x00-\x7F]+', ' ', merged)
+            merged = re.sub(r'\s+', ' ', merged)
+            # Clean up: filter out lines that are mostly symbols or too short, and deduplicate
+            def is_valid_line(line):
+                # Remove lines that are mostly symbols or too short
+                if len(line.strip()) < 5:
+                    return False
+                # If more than 60% of chars are non-alphanumeric, skip
+                alnum = sum(c.isalnum() for c in line)
+                if len(line) == 0 or alnum / len(line) < 0.4:
+                    return False
+                return True
+            filtered_lines = [line for line in sorted(all_lines) if is_valid_line(line)]
+            filtered_merged = "\n".join(filtered_lines)
+            # Use the filtered merged text if it's longer, otherwise use the best single PSM
+            if len(filtered_merged) > best_len:
+                return filtered_merged.strip()
+            else:
+                return best_text.strip()
+        except Exception as e:
+            raise RuntimeError(f"Image extraction failed: {str(e)}")
+    else:
+        raise RuntimeError("Unsupported file type")
+
 
