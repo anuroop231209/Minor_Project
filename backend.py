@@ -246,3 +246,15 @@ def insert_resume_data(
     except Exception as e:
         print(f"[ERROR] Database insertion failed: {str(e)} | Data: name={name}, email={email}, score={score}")
         return False
+    
+def validate_user(username: str, password_hash: str) -> bool:
+    try:
+        with db_cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM candidate_users WHERE username=%s AND password_hash=%s",
+                (username, password_hash)
+            )
+            return cursor.fetchone() is not None
+    except Exception as e:
+        print(f"[ERROR] User validation failed: {str(e)}")
+        return False
