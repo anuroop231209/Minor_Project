@@ -12,6 +12,12 @@ import logging
 import time
 from typing import Dict, Any, List, Optional
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# --- Llama 3 Extraction (via LM Studio OpenAI API) ---
+LMSTUDIO_API_URL = "http://localhost:1234/v1/chat/completions"
+LMSTUDIO_MODEL = "meta-llama/Meta-Llama-3-8B-Instruct"
 
 #Enhanced Prompt Templates
 LLAMA3_EXTRACTION_PROMPT_TEMPLATES = [
@@ -139,4 +145,51 @@ def llama_infer(prompt: str, n_predict: int =1024, temperature: float=0.2)->str:
     except Exception as e:
         logging.error(f"LM Studio API call failed: {e}")
         return f"[ERROR] LM Studio API call failed: {e}"
+
+def extract_first_json(text: str) -> Optional[Dict]:
+    """Extract the first valid JSON object from text with enhanced parsing."""
+    # Try to find JSON within triple backticks
+    if '```json' in text:
+        text = text.split('```json')[1].split('```')[0].strip()
+    elif '```' in text:
+        text = text.split('```')[1].split('```')[0].strip()
+    
+    # Find the first complete JSON object
+    json_start = text.find('{')
+    if json_start == -1:
+        return None
+        
+    brace_count = 0
+    in_string = False
+    escape = False
+    json_str = ""
+    
+    for char in text[json_start:]:
+        if char == '{' and not in_string:
+            brace_count += 1
+        elif char == '}' and not in_string:
+            brace_count -= 1
+        elif char == '"' and not escape:
+            in_string = not in_string
+        elif char == '\\' and in_string:
+            escape = not escape
+        else:
+            escape = False
+            
+        json_str += char
+        
+        if brace_count == 0 and not in_string:
+            break
+    
+    # Try to parse the JSON
+    try:
+        # Clean up common issues
+        json_str = json_str.replace('\n', ' ').replace('\t', ' ')
+        json_str = re.sub(r',\s*}', '}', json_str)
+        json_str = re.sub(r',\s*]', ']', json_str)
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logging.warning(f"JSON parsing failed: {e}")
+        return None
+
     
