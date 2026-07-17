@@ -271,3 +271,13 @@ def register_user(username: str, password_hash: str) -> Tuple[bool, str]:
         return False, "Username already exists"
     except Exception as e:
         return False, f"Registration failed: {str(e)}"
+    
+def get_candidate_data() -> pd.DataFrame:
+    try:
+        with db_cursor() as cursor:
+            cursor.execute("SELECT * FROM user_data")
+            rows = cursor.fetchall()
+            return pd.DataFrame(rows)
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch candidate data: {str(e)}")
+        return pd.DataFrame()
