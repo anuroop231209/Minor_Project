@@ -209,4 +209,40 @@ def extract_text_from_file(file_path: str) -> str:
     else:
         raise RuntimeError("Unsupported file type")
 
+# --- Data Export Utilities ---
+def get_table_download_link(df: pd.DataFrame, filename: str, text: str) -> str:
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    return f'<a href="data:file/csv;base64,{b64}" download="{filename}">{text}</a>'
 
+# --- Database Operations ---
+def insert_resume_data(
+    name: str,
+    email: str,
+    score: float,
+    timestamp: str,
+    candidate_level: str,
+    Skill: str,
+    Experience: str,
+) -> bool:
+    try:
+        with db_cursor() as cursor:
+            required_fields = [name, email, score, timestamp, candidate_level, Skill, Experience]
+            if any(f is None or (isinstance(f, str) and not f.strip()) for f in required_fields):
+                print(f"[ERROR] One or more required fields are missing or empty. Data: {required_fields}")
+                return False
+
+            cursor.execute("""
+                INSERT INTO user_data (
+                    Name, Email_ID, Score, Timestamp,
+                    `Candidate level`, Experience, Skill
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    name, email, score, timestamp,
+                    candidate_level, Experience, Skill
+                ))
+            print(f"[INFO] Successfully inserted resume for {name} ({email}).")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Database insertion failed: {str(e)} | Data: name={name}, email={email}, score={score}")
+        return False
