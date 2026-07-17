@@ -328,3 +328,268 @@ def extract_individual_fields(resume_text: str) -> Dict[str, Any]:
             result['name'] = "N/A"
     
     return result
+def llama3_extract_resume_info(resume_text: str, attempt: int = 1, file_path: str = None) -> Dict[str, Any]:
+    """
+    Extract resume information using Llama 3 with enhanced techniques:
+    1. Multiple prompt templates
+    2. Progressive fallback strategies
+    3. Validation and normalization
+    4. Individual field extraction fallback
+    5. Robust OCR pipeline for image-based PDFs and images
+    """
+    import mimetypes
+    import re
+    # Determine if file needs OCR
+    needs_ocr = False
+    if file_path is not None:
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in ['.png', '.jpg', '.jpeg']:
+            needs_ocr = True
+        elif ext == '.pdf':
+            # Heuristic: if text is very short or contains mostly non-ASCII, treat as image-based
+            ascii_text = re.sub(r'[^\x00-\x7F]+', '', resume_text)
+            if len(ascii_text.strip()) < 50:
+                needs_ocr = True
+    # If needs OCR, run robust OCR pipeline
+    if needs_ocr and attempt == 1:
+        try:
+            from PIL import Image, ImageFilter
+            import pytesseract
+            import cv2
+            import numpy as np
+            if file_path.lower().endswith('.pdf'):
+                from pdf2image import convert_from_path
+                images = convert_from_path(file_path)
+            else:
+                images = [Image.open(file_path)]
+            ocr_text = ""
+            for img in images:
+                # Upscale if small
+                if min(img.size) < 1000:
+                    scale = 2 if min(img.size) > 500 else 3
+                    img = img.resize((img.width * scale, img.height * scale), Image.LANCZOS)
+                img = img.convert('L')
+                img_cv = np.array(img)
+                img_cv = cv2.adaptiveThreshold(img_cv, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+                img_cv = cv2.fastNlMeansDenoising(img_cv, None, 30, 7, 21)
+                img = Image.fromarray(img_cv)
+                img = img.filter(ImageFilter.SHARPEN)
+                texts = []
+                for psm in [3, 4, 6, 11]:
+                    config = f'--oem 3 --psm {psm}'
+                    text = pytesseract.image_to_string(img, lang='eng', config=config)
+                    texts.append(text)
+                all_lines = set()
+                for t in texts:
+                    for line in t.splitlines():
+                        if line.strip():
+                            line = line.replace(' @ ', '@').replace(' . ', '.').replace(' (at) ', '@').replace(' [at] ', '@')
+                            line = line.replace(' dot ', '.').replace(' [dot] ', '.')
+                            all_lines.add(line.strip())
+                merged = "\n".join(sorted(all_lines))
+                merged = re.sub(r'[^\x00-\x7F]+', ' ', merged)
+                merged = re.sub(r'\s+', ' ', merged)
+                ocr_text += merged + "\n"
+            cleaned_text = ocr_text.strip()
+            # Try again with cleaned OCR text
+            return llama3_extract_resume_info(cleaned_text, attempt=2, file_path=file_path)
+        except Exception as e:
+            logging.error(f"OCR pipeline failed: {e}")
+            # Fallback to original text
+    # Select prompt based on attempt number
+    prompt_idx = min(attempt - 1, len(LLAMA3_EXTRACTION_PROMPT_TEMPLATES) - 1)
+    # Use a more detailed prompt for OCR cases
+    if needs_ocr:
+        detailed_prompt = """
+You are an expert resume parser. The following text is extracted from a scanned or image-based resume using OCR, so it may contain errors, missing spaces, or formatting issues. Extract ALL possible fields with best effort, even if the text is messy. Use context and common resume patterns to infer missing fields. Respond ONLY with valid JSON (no explanations, no free text, no markdown, no comments, no code blocks, no extra text, no triple backticks, no labels, no headings, no preamble, no postamble, no formatting, no extra whitespace). Output must be a single valid JSON object and nothing else.
+
+Focus on extracting:
+- Name, email, phone, skills, years_experience, degree, universities, summary, experiences (job_title, company, start_date, end_date, responsibilities)
+- If a field is missing, use "" or [] (do not invent or hallucinate, but do your best to infer from context)
+- For skills and degree, always output a list of strings
+- For experiences, always output a list of objects with all keys present
+- Be precise with dates (use YYYY-MM format when possible)
+- Extract responsibilities as a single string or list of bullet points
+- If you see a section header (e.g. "Skills", "Experience", "Education"), treat the following lines as belonging to that section
+- If the text is messy, use your best judgment to reconstruct the correct information
+
+Resume Text:
+"""
+        prompt = detailed_prompt + resume_text
+    else:
+        prompt = LLAMA3_EXTRACTION_PROMPT_TEMPLATES[prompt_idx] + resume_text
+    logging.info(f"Extraction attempt #{attempt} with prompt template {prompt_idx}")
+    output = llama3_infer(prompt, n_predict=1024, temperature=0.3)
+    parsed = extract_first_json(output)
+    if parsed and validate_resume_json(parsed):
+        parsed['experiences'] = parse_experiences(parsed.get('experiences', []))
+        skills = parsed.get('skills', [])
+        if isinstance(skills, str):
+            parsed['skills'] = [s.strip() for s in skills.split(',') if s.strip()]
+        elif isinstance(skills, list):
+            parsed['skills'] = [str(s).strip() for s in skills]
+        else:
+            parsed['skills'] = []
+        degree = parsed.get('degree', [])
+        if isinstance(degree, str):
+            parsed['degree'] = [degree.strip()]
+        elif isinstance(degree, list):
+            parsed['degree'] = [str(d).strip() for d in degree]
+        else:
+            parsed['degree'] = []
+        parsed['name'] = parsed.get('name', 'N/A').strip().title()
+        logging.info("Successfully extracted structured resume data")
+        return parsed
+    if attempt >= 2:
+        logging.warning("Falling back to individual field extraction")
+        parsed = extract_individual_fields(resume_text)
+        parsed['experiences'] = []
+        return parsed
+    return {
+        "name": "N/A",
+        "email": "N/A",
+        "phone": "N/A",
+        "skills": [],
+        "years_experience": "N/A",
+        "degree": "N/A",
+        "universities": [],
+        "summary": "N/A",
+        "experiences": [],
+        "fallback": True
+    }
+
+# --- PyTorch BiLSTM Model for Resume Scoring ---
+class ResumeDataset(Dataset):
+    def __init__(self, csv_path, max_len=256):
+        self.df = pd.read_csv(csv_path)
+        self.max_len = max_len
+        self.texts = (
+            self.df['career_objective'].fillna('') + ' ' +
+            self.df['skills'].fillna('') + ' ' +
+            self.df['responsibilities'].fillna('')
+        )
+        self.scores = self.df['matched_score'].values.astype(np.float32)
+        self.vocab = {'<PAD>': 0, '<UNK>': 1}
+        idx = 2
+        for text in self.texts:
+            for word in str(text).split():
+                if word not in self.vocab:
+                    self.vocab[word] = idx
+                    idx += 1
+    def __len__(self):
+        return len(self.df)
+    def __getitem__(self, idx):
+        text = str(self.texts.iloc[idx])
+        tokens = [self.vocab.get(w, self.vocab['<UNK>']) for w in text.split()]
+        if len(tokens) < self.max_len:
+            tokens += [self.vocab['<PAD>']] * (self.max_len - len(tokens))
+        else:
+            tokens = tokens[:self.max_len]
+        return torch.tensor(tokens, dtype=torch.long), torch.tensor(self.scores[idx], dtype=torch.float32)
+
+class BiLSTMRegressor(nn.Module):
+    def __init__(self, vocab_size, embed_dim=256, hidden_dim=256, num_layers=2, dropout=0.3):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+        self.lstm = nn.LSTM(embed_dim, hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True, dropout=dropout)
+        self.fc = nn.Linear(hidden_dim * 2, 1)
+    def forward(self, x):
+        x = self.embedding(x)
+        _, (h, _) = self.lstm(x)
+        h = torch.cat((h[-2], h[-1]), dim=1)
+        out = self.fc(h)
+        return out.squeeze(1)
+
+def train_bilstm(csv_path, model_out_path="bilstm_resume_score.pth", epochs=20, batch_size=32, lr=1e-3):
+    dataset = ResumeDataset(csv_path)
+    val_split = 0.1
+    val_size = int(len(dataset) * val_split)
+    train_size = len(dataset) - val_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    model = BiLSTMRegressor(vocab_size=len(dataset.vocab))
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.MSELoss()
+    best_val_loss = float('inf')
+    patience = 3
+    patience_counter = 0
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0
+        for X, y in train_loader:
+            X, y = X.to(device), y.to(device)
+            optimizer.zero_grad()
+            preds = model(X)
+            loss = criterion(preds, y)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item() * X.size(0)
+        avg_loss = total_loss / train_size
+        # Validation
+        model.eval()
+        val_loss = 0
+        with torch.no_grad():
+            for X, y in val_loader:
+                X, y = X.to(device), y.to(device)
+                preds = model(X)
+                loss = criterion(preds, y)
+                val_loss += loss.item() * X.size(0)
+        avg_val_loss = val_loss / val_size
+        print(f"[Epoch {epoch+1}] Train MSE: {avg_loss:.4f} | Val MSE: {avg_val_loss:.4f}")
+        # Early stopping
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            patience_counter = 0
+            torch.save({'model_state_dict': model.state_dict(), 'vocab': dataset.vocab}, model_out_path)
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print("Early stopping triggered.")
+                break
+    print(f"[INFO] BiLSTM model trained and saved to {model_out_path}")
+    return model, dataset.vocab
+
+def bilstm_score_resume(text, model_path="model/bilstm_resume_score.pth", max_len=128):
+    if not os.path.exists(model_path):
+        return None  # Model file missing
+    try:
+        checkpoint = torch.load(model_path, map_location='cpu')
+        vocab = checkpoint['vocab']
+        model = BiLSTMRegressor(vocab_size=len(vocab))
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.eval()
+        tokens = [vocab.get(w, vocab['<UNK>']) for w in str(text).split()]
+        if len(tokens) < max_len:
+            tokens += [vocab['<PAD>']] * (max_len - len(tokens))
+        else:
+            tokens = tokens[:max_len]
+        X = torch.tensor([tokens], dtype=torch.long)
+        with torch.no_grad():
+            score = model(X).item()
+        return float(score)
+    except Exception as e:
+        return None  # Could not load or run model
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Llama 3 Extraction and BiLSTM Resume Scoring")
+    parser.add_argument("train_bilstm", nargs="?", help="Train BiLSTM on resume_data.csv", default=None)
+    parser.add_argument("--csv_path", type=str, help="Path to resume_data.csv")
+    parser.add_argument("--model_out_path", type=str, default="bilstm_resume_score.pth", help="Output path for BiLSTM model")
+    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    args = parser.parse_args()
+    if args.train_bilstm:
+        train_bilstm(args.csv_path, args.model_out_path, args.epochs, args.batch_size, args.lr)
+    else:
+        print("""
+Usage:
+  python model.py train_bilstm --csv_path resume_data.csv [--model_out_path bilstm_resume_score.pth] [--epochs 10] [--batch_size 16] [--lr 0.001]
+
+Description:
+  train_bilstm - Train BiLSTM on your resume_data.csv for resume scoring
+        """)
