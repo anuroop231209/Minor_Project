@@ -281,3 +281,26 @@ def get_candidate_data() -> pd.DataFrame:
     except Exception as e:
         print(f"[ERROR] Failed to fetch candidate data: {str(e)}")
         return pd.DataFrame()
+    
+def get_stats() -> Dict[str, Any]:
+    stats = {}
+    try:
+        with db_cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) as total FROM user_data")
+            stats['total_candidates'] = cursor.fetchone()['total']
+
+            cursor.execute("SELECT AVG(resume_score) as avg_score FROM user_data")
+            stats['avg_score'] = cursor.fetchone()['avg_score'] or 0
+
+            cursor.execute("SELECT COUNT(*) as recent FROM user_data WHERE Timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)")
+            stats['recent_candidates'] = cursor.fetchone()['recent']
+
+        return stats
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch stats: {str(e)}")
+        return {'total_candidates': 0, 'avg_score': 0, 'recent_candidates': 0}
+
+# --- Compatibility Stubs ---
+def get_resume_score(*args, **kwargs):
+    # Stub implementation to resolve import error
+    return None
