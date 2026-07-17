@@ -258,3 +258,16 @@ def validate_user(username: str, password_hash: str) -> bool:
     except Exception as e:
         print(f"[ERROR] User validation failed: {str(e)}")
         return False
+
+def register_user(username: str, password_hash: str) -> Tuple[bool, str]:
+    try:
+        with db_cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO candidate_users (username, password_hash) VALUES (%s, %s)",
+                (username, password_hash)
+            )
+        return True, "Registration successful"
+    except pymysql.err.IntegrityError:
+        return False, "Username already exists"
+    except Exception as e:
+        return False, f"Registration failed: {str(e)}"
