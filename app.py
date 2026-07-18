@@ -1201,6 +1201,74 @@ def admin_login():
                         """, unsafe_allow_html=True)
 
 
+def candidate_detail_admin():
+    st.markdown("# Candidate Detail Explanation")
+    candidate = st.session_state.get('selected_candidate', None)
+    if not candidate:
+        st.warning("No candidate selected.")
+        return
+    with stylable_container(
+        key="cand_detail_box",
+        css_styles="""
+        {
+            background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+            border-radius: 16px;
+            padding: 2rem;
+            border: 1px solid #463FA9;
+            color: #ECDFD2;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 12px 40px rgba(7,5,246,0.2);
+        }
+        """
+    ):
+        st.markdown(f"**Name:** {candidate.get('Name', '')}")
+        st.markdown(f"**Email:** {candidate.get('Email_ID', '')}")
+        st.markdown(f"**Score:** {candidate.get('Score', candidate.get('resume_score', ''))}")
+        st.markdown(f"**Candidate level:** {candidate.get('Candidate level', '')}")
+        st.markdown(f"**Skills:** {candidate.get('Skill', candidate.get('Actual_skills', ''))}")
+        st.markdown(f"**Timestamp:** {candidate.get('Timestamp', '')}")
+    
+    import json
+    candidate_id = str(candidate.get('ID', candidate.get('Email_ID', '')))
+    explanation_key = f"llama_explanation_{candidate_id}"
+    if explanation_key not in st.session_state:
+        explanation_prompt = f"""
+You are an expert resume reviewer. Given the following candidate data (in JSON), provide a detailed, holistic explanation for the admin about why this candidate should or should not be selected for an interview. Your explanation must consider ALL aspects of the resume, including the Experience column (which summarizes work experience), skills, degree/education, certifications, and any other available information. Reference specific strengths, weaknesses, exceptional qualities, and any red flags. If the candidate's score is low, discuss whether there are redeeming factors that might justify an interview, or if the weaknesses are too significant. Your explanation should help the admin make a well-informed decision, even if it means reconsidering a low-score candidate for an interview. Do NOT provide a final yes/no decision—just a thorough, evidence-based analysis based on the overall resume. Finish your explanation completely and do not leave the last sentence incomplete.
+
+Candidate Data:
+{json.dumps(candidate, ensure_ascii=False)}
+
+Respond with a clear, admin-focused explanation.
+"""
+        with st.spinner("Generating explanation with Llama..."):
+            explanation_output = llama3_infer(explanation_prompt)
+        st.session_state[explanation_key] = explanation_output
+    else:
+        explanation_output = st.session_state[explanation_key]
+    
+    with stylable_container(
+        key="llama_exp_box",
+        css_styles="""
+        {
+            background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+            border-radius: 16px;
+            padding: 2rem;
+            border: 1px solid #463FA9;
+            color: #ECDFD2;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 12px 40px rgba(7,5,246,0.2);
+        }
+        """
+    ):
+        st.subheader("Llama's Explanation:")
+        st.markdown(explanation_output)
+    
+    if st.button("Back to Admin Dashboard"):
+        st.session_state.page = 'admin_dashboard'
+        st.rerun()
+
+
+
 
 
 
