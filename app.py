@@ -20,9 +20,11 @@ from backend import (
     validate_user,register_user,get_candidate_data,
     get_stats
 )
-from model import llama3_extract_resume_info, bilstm_score_resume
+from model import (llama3_extract_resume_info, 
+                   bilstm_score_resume,
+                   llama3_infer,extract_first_json)
 
-def load_lottieurl(url):
+def load_lottieurl(url, timeout=10):
     r = requests.get(url)
     if r.status_code != 200:
         return None
@@ -32,7 +34,7 @@ def gradient_text(text,color1,color2):
     return f"""
     <style>
     .gradient-text {{
-        background: -webkit-linear-gradient({color1}, {color2});
+        background: -webkit-linear-gradient(45deg,{color1}, {color2});
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-weight: 800;
@@ -81,15 +83,17 @@ def display_candidate_info(analysis):
     with stylable_container(
         key="candidate_info",
         css_style="""
-            border: 2px solid #4CAF50;
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
-            margin-bottom: 1.5rem;
-            background: white;
+          background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+            border: 1px solid #463FA9;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 16px 48px rgba(7,5,246,0.25);
+            margin-bottom: 1.75rem;
+            color: #ECDFD2;
         """
     ):
-        st.subheader("Candidate Information")
+        st.markdown("### 👤 Candidate Profile")
+        
         name = analysis.get('name', 'N/A')
         email = analysis.get('email', 'N/A')
         phone = analysis.get('phone', 'N/A')
@@ -109,14 +113,16 @@ def display_skills(analysis):
     with stylable_container(
         key="skills_section",
         css_style="""
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-            margin-bottom: 1.5rem;
-            background: white;
+            background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+            border: 1px solid #463FA9;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 16px 48px rgba(7,5,246,0.25);
+            margin-bottom: 1.75rem;
+            color: #ECDFD2;
         """
     ):
-        st.subheader("Skills")
+        st.markdown("### 🛠️ Technical Skills")
         skills = analysis.get('skills', [])
         if not skills or(isinstance(skills, str) and not skills.strip()):
             st.markdown("NA")
@@ -128,8 +134,12 @@ def display_skills(analysis):
                 except Exception as e:
                     skills = [skills]
             if isinstance(skills, list):
-                st.markdown(", ".join([skill.strip() for skill in skills if skill]) or "NA")
-
+                skill_tags = [str(skill).strip() for skill in skills if skill and str(skill).strip()]
+                if skill_tags:
+                    tags_html = "".join([f'<span style="background: rgba(33,56,133,0.8); color: #EB70EC; padding: 8px 16px; border-radius: 24px; font-size: 0.9rem; font-weight: 600; display: inline-block; margin: 5px; border: 1px solid #6A57F3; box-shadow: 0 4px 12px rgba(106,87,243,0.25);">{tag}</span>' for tag in skill_tags])
+                    st.markdown(f'<div style="display: flex; flex-wrap: wrap; gap: 8px;">{tags_html}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown("NA")
             else:
                 st.markdown(str(skills) if str(skills).strip() else "NA")
 
@@ -138,13 +148,16 @@ def display_degree(analysis):
     with stylable_container(
         key="degree_section",
         css_style="""
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-            background: white;
+            background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+            border: 1px solid #463FA9;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 16px 48px rgba(7,5,246,0.25);
+            margin-bottom: 1.75rem;
+            color: #ECDFD2;
         """
     ):
-        st.subheader("Degree")
+        st.markdown("### 🎓 Education & Degrees")
         degree = analysis.get('degree', 'N/A')
         #if degree is string , try to parse as list if it looks like a list
         if isinstance(degree, str):
@@ -157,7 +170,7 @@ def display_degree(analysis):
             except Exception:
                 pass
         #Display logic for list or string 
-        if not degree or (isinstance(degree, str) and not degree.strip().lower() in ['na', 'none', 'null','']):
+        if not degree or (isinstance(degree, str) and not degree.strip().lower() in ['n/a', 'na', 'none', 'null','']):
             st.markdown("NA")
         elif isinstance(degree, list):
             degree_list = [str(d) for d in degree if d and str (d).strip().lower() not in ['na', 'none', 'null',''] ]
@@ -171,11 +184,13 @@ def display_work_experience(analysis):
     with stylable_container(
         key="work_exp",
         css_style={"""
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-            margin-bottom: 1.5rem;
-            background: white;
+           background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+            border: 1px solid #463FA9;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 16px 48px rgba(7,5,246,0.25);
+            margin-bottom: 1.75rem;
+            color: #ECDFD2;
         """
         }
         
