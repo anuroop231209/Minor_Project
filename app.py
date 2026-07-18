@@ -923,6 +923,284 @@ Respond with a clear, candidate-friendly explanation.
         st.session_state.page = 'home'
         st.rerun()
 
+def admin_dashboard():
+    """Enhanced admin dashboard with better data visualization."""
+    st.markdown("""
+    <div style="margin-bottom: 2rem;">
+        <h1 style="margin-bottom: 0.5rem; color: #ffffff;">🛡️ Admin Dashboard</h1>
+        <p style="color: #B693EF;">Manage candidate data and system analytics</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    stats = get_stats()
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        with stylable_container(
+            key="total_candidates",
+            css_styles="""
+            {
+                background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+                border-radius: 16px;
+                padding: 1.5rem;
+                border: 1px solid #463FA9;
+                color: #ECDFD2;
+                box-shadow: 0 12px 40px rgba(7,5,246,0.2);
+            }
+            """
+        ):
+            st.markdown(f"""
+            <div style="text-align: center;">
+                <p style="font-size: 0.9rem; color: #B693EF; margin-bottom: 0.5rem;">Total Candidates</p>
+                <h2 style="color: #EB70EC; margin-top: 0;">{stats['total_candidates']}</h2>
+                <p style="font-size: 0.8rem; color: #B693EF;">↗️ Active Submissions</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col2:
+        with stylable_container(
+            key="avg_score",
+            css_styles="""
+            {
+                background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+                border-radius: 16px;
+                padding: 1.5rem;
+                border: 1px solid #463FA9;
+                color: #ECDFD2;
+                box-shadow: 0 12px 40px rgba(7,5,246,0.2);
+            }
+            """
+        ):
+            avg_score = round(stats['avg_score'], 1) if stats['avg_score'] else 0
+            st.markdown(f"""
+            <div style="text-align: center;">
+                <p style="font-size: 0.9rem; color: #B693EF; margin-bottom: 0.5rem;">Average Score</p>
+                <h2 style="color: #EB70EC; margin-top: 0;">{avg_score}</h2>
+                <p style="font-size: 0.8rem; color: #B693EF;">{"🔼 Strong performance" if avg_score > 60 else "🔽 Needs improvement"}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col3:
+        with stylable_container(
+            key="recent_activity",
+            css_styles="""
+            {
+                background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+                border-radius: 16px;
+                padding: 1.5rem;
+                border: 1px solid #463FA9;
+                color: #ECDFD2;
+                box-shadow: 0 12px 40px rgba(7,5,246,0.2);
+            }
+            """
+        ):
+            st.markdown(f"""
+            <div style="text-align: center;">
+                <p style="font-size: 0.9rem; color: #B693EF; margin-bottom: 0.5rem;">Recent (7 days)</p>
+                <h2 style="color: #EB70EC; margin-top: 0;">{stats['recent_candidates']}</h2>
+                <p style="font-size: 0.8rem; color: #B693EF;">Recent submissions</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with stylable_container(
+        key="data_table",
+        css_styles="""
+        {
+            background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+            border-radius: 16px;
+            padding: 1.75rem;
+            border: 1px solid #463FA9;
+            margin-bottom: 1.5rem;
+            color: #ECDFD2;
+            box-shadow: 0 12px 40px rgba(7,5,246,0.2);
+        }
+        """
+    ):
+        st.markdown("### 📋 Candidate Data")
+        st.markdown("View and manage all candidate submissions and analysis results.")
+        
+        df = get_candidate_data()
+        if not df.empty:
+            drop_cols = [col for col in df.columns if col.lower() in ["page_no", "predicted_field", "recommended_skills", "user_level"]]
+            df = df.drop(columns=drop_cols, errors="ignore")
+            
+            def infer_level(row):
+                try:
+                    years = float(row.get("years_experience", 0))
+                except Exception:
+                    years = 0
+                degree = str(row.get("degree", "") or row.get("Degree", "")).lower()
+                skills = str(row.get("Skill", "") or row.get("skills", "") or row.get("Skills", "")).split(",")
+                if years >= 5:
+                    return "Senior"
+                elif ("bachelor" in degree or "master" in degree) and len([s for s in skills if s.strip()]) >= 5:
+                    return "Mid"
+                else:
+                    return "Junior"
+            
+            df["Candidate level"] = df.apply(infer_level, axis=1)
+            
+            def summarize_experience(row):
+                job = row.get("job_title") or row.get("Job Title")
+                company = row.get("company") or row.get("Company")
+                if job and company:
+                    return f"{job} at {company}"
+                elif job:
+                    return str(job)
+                elif company:
+                    return str(company)
+                for col in row.index:
+                    if 'experience' in col.lower():
+                        val = row.get(col)
+                        if val and str(val).strip() and str(val).strip().lower() not in ["none", "n/a", "null"]:
+                            return str(val)
+                return "N/A"
+            
+            df["Experience"] = df.apply(summarize_experience, axis=1)
+            drop_course_cols = [col for col in df.columns if "course" in col.lower()]
+            if drop_course_cols:
+                df = df.drop(columns=drop_course_cols, errors="ignore")
+            
+            score_col = "Score" if "Score" in df.columns else ("resume_score" if "resume_score" in df.columns else None)
+            if score_col:
+                df = df.sort_values(by=score_col, ascending=False)
+            df = df.reset_index(drop=True)
+            if "ID" in df.columns:
+                df = df.drop(columns=["ID"])
+            df.insert(0, "ID", df.index + 1)
+            
+            st.data_editor(
+                df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    score_col: st.column_config.ProgressColumn(
+                        "Score",
+                        help="Resume quality score",
+                        format="%.1f",
+                        min_value=0,
+                        max_value=100,
+                    )
+                } if score_col else {},
+                disabled=True,
+                key="admin_table_editor",
+                num_rows="dynamic"
+            )
+            candidate_ids = df["ID"].tolist()
+            selected_id = st.selectbox("Select candidate ID to view details", candidate_ids, key="select_candidate_id")
+            if st.button("Show Details for Selected Candidate"):
+                candidate = df[df["ID"] == selected_id].iloc[0].to_dict()
+                st.session_state.selected_candidate = candidate
+                st.session_state.page = 'candidate_detail_admin'
+                st.rerun()
+            st.markdown(get_table_download_link(df, "candidate_data.csv", "📥 Download as CSV"), unsafe_allow_html=True)
+        else:
+            st.info("No candidate data available")
+    
+    if not df.empty:
+        with stylable_container(
+            key="score_chart",
+            css_styles="""
+            {
+                background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+                border-radius: 16px;
+                padding: 1.75rem;
+                border: 1px solid #463FA9;
+                margin-bottom: 1.5rem;
+                color: #ECDFD2;
+                box-shadow: 0 12px 40px rgba(7,5,246,0.2);
+            }
+            """
+        ):
+            st.markdown("### 📊 Score Distribution")
+            st.markdown("This chart shows the distribution of resume scores for all candidates in the system.")
+            target_score_col = "Score" if "Score" in df.columns else ("resume_score" if "resume_score" in df.columns else None)
+            if target_score_col:
+                df['PlotScore'] = pd.to_numeric(df[target_score_col], errors='coerce')
+                chart_df = df.dropna(subset=['PlotScore'])
+                if not chart_df.empty:
+                    score_bins = pd.cut(chart_df['PlotScore'], bins=[0, 20, 40, 60, 80, 100], right=True,
+                                        labels=['0-20', '21-40', '41-60', '61-80', '81-100'])
+                    pie_df = score_bins.value_counts().reset_index()
+                    pie_df.columns = ['Score Range', 'Count']
+                    fig = px.pie(pie_df, names='Score Range', values='Count', 
+                                 title='Candidate Score Distribution',
+                                 color_discrete_sequence=['#4044F9', '#6A57F3', '#EB70EC', '#B693EF', '#213885'])
+                    fig.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='#ECDFD2'),
+                        showlegend=True,
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=-0.2,
+                            xanchor="center",
+                            x=0.5
+                        ),
+                        height=500,
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+    
+    if st.button("🚪 Logout", type="primary", use_container_width=True):
+        st.session_state.admin_logged_in = False
+        st.session_state.page = 'home'
+        st.rerun()
+
+def admin_login():
+    """Enhanced admin login with security focus."""
+    with stylable_container(
+        key="admin_login_container",
+        css_styles="""
+        {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 2rem 0;
+        }
+        """
+    ):
+        with stylable_container(
+            key="admin_login_box",
+            css_styles="""
+            {
+                background: linear-gradient(135deg, #110792 0%, #1a10a8 100%);
+                border-radius: 16px;
+                padding: 2.5rem;
+                border: 1px solid #463FA9;
+                box-shadow: 0 12px 40px rgba(7,5,246,0.2);
+                text-align: center;
+                color: #ECDFD2;
+            }
+            """
+        ):
+            st.markdown("""
+            <div style="margin-bottom: 2rem;">
+                <div style="background: #213885; width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; border: 1px solid #6A57F3;">
+                    <span style="font-size: 2rem; color: #EB70EC;">🔒</span>
+                </div>
+                <h2 style="margin-bottom: 0.5rem; color: #ffffff;">Admin Portal</h2>
+                <p style="color: #B693EF;">Restricted access to authorized personnel only</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.form("admin_login_form"):
+                ad_user = st.text_input("Username", placeholder="Enter admin username")
+                ad_password = st.text_input("Password", type="password", placeholder="Enter admin password")
+                
+                submitted = st.form_submit_button("Login", type="primary", use_container_width=True)
+                if submitted:
+                    if ad_user == 'ArmanLekhak' and ad_password == 'Project':
+                        st.session_state.admin_logged_in = True
+                        st.session_state.page = 'admin_dashboard'
+                        st.rerun()
+                    else:
+                        st.error("Incorrect credentials")
+                        st.markdown("""
+                        <div style="text-align: center; margin-top: 1rem;">
+                            <p style="color: #B693EF; font-size: 0.9rem;">Contact system administrator if you've forgotten your credentials</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+
 
 
 
