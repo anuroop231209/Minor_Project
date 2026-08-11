@@ -21,6 +21,27 @@ DB_CONFIG = {
     'cursorclass': pymysql.cursors.DictCursor
 }
 
+# --- Database Connection Utilities ---
+@contextlib.contextmanager
+def db_connection():
+    conn = pymysql.connect(**DB_CONFIG)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+@contextlib.contextmanager
+def db_cursor():
+    with db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            yield cursor
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
 
 # --- Database Setup ---
 def setup_database():
