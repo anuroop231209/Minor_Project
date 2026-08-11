@@ -14,24 +14,16 @@ from typing import Optional, Tuple, Dict, Any, List
 # --- Configuration ---
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'AnuroopTater',
+    'user': 'root',
     'password': 'Project',
     'db': 'candidate',
     'charset': 'utf8mb4',
     'cursorclass': pymysql.cursors.DictCursor
 }
 
-# --- Database Connection Utilities ---
+#---Database Connection and utilities---
 @contextlib.contextmanager
 def db_connection():
-    conn = pymysql.connect(**DB_CONFIG)
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-@contextlib.contextmanager
-def db_cursor():
     with db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -43,7 +35,7 @@ def db_cursor():
         finally:
             cursor.close()
 
-# --- Database Setup ---
+#---Database SetUp---
 def setup_database():
     with db_cursor() as cursor:
         cursor.execute("CREATE DATABASE IF NOT EXISTS candidate;")
@@ -67,16 +59,21 @@ def setup_database():
                 username VARCHAR(255) UNIQUE NOT NULL,
                 password_hash VARCHAR(255) NOT NULL
             );
-        """)
+        """)     
 
-# Initialize database on import
-setup_database()
+#Initialize database on import
+try:
+    setup_database()
+except Exception as e:
+    print("Dtabase disabled",e)
+
+    setup_database() 
 
 # --- Security Utilities ---
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-# --- File Hashing Utility ---
+#--- File Hashing Utility ---
 def hash_file(file_path: str) -> str:
     """Return the SHA256 hash of the file at file_path."""
     import hashlib
@@ -90,7 +87,7 @@ def hash_file(file_path: str) -> str:
             sha256.update(data)
     return sha256.hexdigest()
 
-        
+       
 #PDF and Image Processing
 def extract_text_from_pdf(file_path: str) -> str:
     try:

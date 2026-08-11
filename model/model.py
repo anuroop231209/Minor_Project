@@ -460,136 +460,50 @@ Resume Text:
 
 # --- PyTorch BiLSTM Model for Resume Scoring ---
 class ResumeDataset(Dataset):
-    def __init__(self, csv_path, max_len=256):
+    """Dataset expected by the existing resume-score training pipeline."""
+
+    REQUIRED_COLUMNS = {
+        "career_objective",
+        "skills",
+        "responsibilities",
+        "matched_score",
+    }
+
+    def __init__(self, csv_path: str | os.PathLike[str], max_len: int = 256):
         self.df = pd.read_csv(csv_path)
+        missing = self.REQUIRED_COLUMNS.difference(self.df.columns)
+        if missing:
+            raise ValueError(
+                "Training CSV is missing required columns: " + ", ".join(sorted(missing))
+            )
+
         self.max_len = max_len
         self.texts = (
-            self.df['career_objective'].fillna('') + ' ' +
-            self.df['skills'].fillna('') + ' ' +
-            self.df['responsibilities'].fillna('')
+            self.df["career_objective"].fillna("").astype(str)
+            + " "
+            + self.df["skills"].fillna("").astype(str)
+            + " "
+            + self.df["responsibilities"].fillna("").astype(str)
         )
-        self.scores = self.df['matched_score'].values.astype(np.float32)
-        self.vocab = {'<PAD>': 0, '<UNK>': 1}
-        idx = 2
+        self.scores = self.df["matched_score"].values.astype(np.float32)
+
+        self.vocab: Dict[str, int] = {"<PAD>": 0, "<UNK>": 1}
         for text in self.texts:
             for word in str(text).split():
                 if word not in self.vocab:
-                    self.vocab[word] = idx
-                    idx += 1
-    def __len__(self):
-        return len(self.df)
-    def __getitem__(self, idx):
-        text = str(self.texts.iloc[idx])
-        tokens = [self.vocab.get(w, self.vocab['<UNK>']) for w in text.split()]
-        if len(tokens) < self.max_len:
-            tokens += [self.vocab['<PAD>']] * (self.max_len - len(tokens))
-        else:
-            tokens = tokens[:self.max_len]
-        return torch.tensor(tokens, dtype=torch.long), torch.tensor(self.scores[idx], dtype=torch.float32)
+                    self.vocab[word] = len(self.vocab)
 
-class BiLSTMRegressor(nn.Module):
-    def __init__(self, vocab_size, embed_dim=256, hidden_dim=256, num_layers=2, dropout=0.3):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-        self.lstm = nn.LSTM(embed_dim, hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True, dropout=dropout)
-        self.fc = nn.Linear(hidden_dim * 2, 1)
-    def forward(self, x):
-        x = self.embedding(x)
-        _, (h, _) = self.lstm(x)
-        h = torch.cat((h[-2], h[-1]), dim=1)
-        out = self.fc(h)
-        return out.squeeze(1)
-
-def train_bilstm(csv_path, model_out_path="bilstm_resume_score.pth", epochs=20, batch_size=32, lr=1e-3):
-    dataset = ResumeDataset(csv_path)
-    val_split = 0.1
-    val_size = int(len(dataset) * val_split)
-    train_size = len(dataset) - val_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size)
-    model = BiLSTMRegressor(vocab_size=len(dataset.vocab))
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = model.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.MSELoss()
-    best_val_loss = float('inf')
-    patience = 3
-    patience_counter = 0
-    for epoch in range(epochs):
-        model.train()
-        total_loss = 0
-        for X, y in train_loader:
-            X, y = X.to(device), y.to(device)
-            optimizer.zero_grad()
-            preds = model(X)
-            loss = criterion(preds, y)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item() * X.size(0)
-        avg_loss = total_loss / train_size
-        # Validation
-        model.eval()
-        val_loss = 0
-        with torch.no_grad():
-            for X, y in val_loader:
-                X, y = X.to(device), y.to(device)
-                preds = model(X)
-                loss = criterion(preds, y)
-                val_loss += loss.item() * X.size(0)
-        avg_val_loss = val_loss / val_size
-        print(f"[Epoch {epoch+1}] Train MSE: {avg_loss:.4f} | Val MSE: {avg_val_loss:.4f}")
-        # Early stopping
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            patience_counter = 0
-            torch.save({'model_state_dict': model.state_dict(), 'vocab': dataset.vocab}, model_out_path)
-        else:
-            patience_counter += 1
-            if patience_counter >= patience:
-                print("Early stopping triggered.")
-                break
-    print(f"[INFO] BiLSTM model trained and saved to {model_out_path}")
-    return model, dataset.vocab
-
-def bilstm_score_resume(text, model_path="model/bilstm_resume_score.pth", max_len=128):
-    if not os.path.exists(model_path):
-        return None  # Model file missing
-    try:
-        checkpoint = torch.load(model_path, map_location='cpu')
-        vocab = checkpoint['vocab']
-        model = BiLSTMRegressor(vocab_size=len(vocab))
-        model.load_state_dict(checkpoint['model_state_dict'])
-        model.eval()
-        tokens = [vocab.get(w, vocab['<UNK>']) for w in str(text).split()]
-        if len(tokens) < max_len:
-            tokens += [vocab['<PAD>']] * (max_len - len(tokens))
-        else:
-            tokens = tokens[:max_len]
-        X = torch.tensor([tokens], dtype=torch.long)
-        with torch.no_grad():
-            score = model(X).item()
-        return float(score)
-    except Exception as e:
-        return None  # Could not load or run model
-
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Llama 3 Extraction and BiLSTM Resume Scoring")
-    parser.add_argument("train_bilstm", nargs="?", help="Train BiLSTM on resume_data.csv", default=None)
-    parser.add_argument("--csv_path", type=str, help="Path to resume_data.csv")
-    parser.add_argument("--model_out_path", type=str, default="bilstm_resume_score.pth", help="Output path for BiLSTM model")
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    args = parser.parse_args()
-    if args.train_bilstm:
-        train_bilstm(args.csv_path, args.model_out_path, args.epochs, args.batch_size, args.lr)
-    else:
-        print("""
-Usage:
-  python model.py train_bilstm --csv_path resume_data.csv [--model_out_path bilstm_resume_score.pth] [--epochs 10] [--batch_size 16] [--lr 0.001]
-
-Description:
-  train_bilstm - Train BiLSTM on your resume_data.csv for resume scoring
-        """)
+    def _len_(self) -> int:
+        return len(self.df)        
+    
+    def __getitem__(self, index: int):
+        tokens = [
+            self.vocab.get(word, self.vocab["<UNK>"])
+            for word in str(self.texts.iloc[index]).split()
+        ]
+        tokens = tokens[: self.max_len]
+        tokens += [self.vocab["<PAD>"]] * (self.max_len - len(tokens))
+        return (
+            torch.tensor(tokens, dtype=torch.long),
+            torch.tensor(self.scores[index], dtype=torch.float32),
+        ) 
