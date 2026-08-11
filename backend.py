@@ -15,6 +15,16 @@ import pymysql
 from PIL import Image, ImageFilter
 from wordcloud import WordCloud
 
+# --- Configuration ---
+DB_CONFIG = {
+    'host': 'localhost',
+    'user': 'root',
+    'password': 'Project',
+    'db': 'candidate',
+    'charset': 'utf8mb4',
+    'cursorclass': pymysql.cursors.DictCursor
+}
+
 
        
 #PDF and Image Processing
