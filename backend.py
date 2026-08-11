@@ -72,6 +72,20 @@ setup_database()
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
+#--- File Hashing Utility ---
+def hash_file(file_path: str) -> str:
+    """Return the SHA256 hash of the file at file_path."""
+    import hashlib
+    BUF_SIZE = 65536
+    sha256 = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        while True:
+            data = f.read(BUF_SIZE)
+            if not data:
+                break
+            sha256.update(data)
+    return sha256.hexdigest()
+
        
 #PDF and Image Processing
 def extract_text_from_pdf(file_path: str) -> str:
