@@ -39,6 +39,32 @@ def db_connection():
         finally:
             cursor.close()
 
+#---Database SetUp---
+def setup_database():
+    with db_cursor() as cursor:
+        cursor.execute("CREATE DATABASE IF NOT EXISTS candidate;")
+        cursor.execute("USE candidate;")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_data (
+                ID INT NOT NULL AUTO_INCREMENT,
+                Name VARCHAR(500) NULL,
+                Email_ID VARCHAR(500) NULL,
+                Score FLOAT NULL,
+                Timestamp VARCHAR(50) NULL,
+                `Candidate level` VARCHAR(50) NULL,
+                Experience TEXT NULL,
+                Skill TEXT NULL,
+                PRIMARY KEY (ID)
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS candidate_users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL
+            );
+        """)            
+
        
 #PDF and Image Processing
 def extract_text_from_pdf(file_path: str) -> str:
