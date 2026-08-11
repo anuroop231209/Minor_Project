@@ -39,6 +39,7 @@ DB_CONFIG: Dict[str, Any] = {
 }
 _DATABASE_READY = False 
 _DATABASE_ERROR: Exception | None = None
+
         
 #PDF and Image Processing
 def extract_text_from_pdf(file_path: str) -> str:
