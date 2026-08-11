@@ -62,7 +62,12 @@ def setup_database():
         """)     
 
 #Initialize database on import
-setup_database()
+try:
+    setup_database()
+except Exception as e:
+    print("Dtabase disabled",e)
+
+    setup_database() 
 
 # --- Security Utilities ---
 def hash_password(password: str) -> str:
