@@ -263,7 +263,42 @@ def parse_experiences(experiences: List[Dict]) -> List[Dict]:
         
     return parsed
 
-
+def extract_individual_fields(resume_text: str) -> Dict[str, Any]:
+    """Fallback method: extract each field individually with specialized prompts."""
+    fields = {
+        "name": "Extract the candidate's full name from the resume text. Respond ONLY with the name itself, no explanations, no extra text, no context, no labels, no markdown, no comments. If not found, respond with N/A only.",
+        "email": "Extract the candidate's email address from the resume text. Respond ONLY with the email itself, no explanations, no extra text, no context, no labels, no markdown, no comments. If not found, respond with N/A only.",
+        "phone": "Extract the candidate's phone number from the resume text. Respond ONLY with the phone number itself, no explanations, no extra text, no context, no labels, no markdown, no comments. If not found, respond with N/A only.",
+        "skills": "Extract the candidate's skills as a JSON list from the resume text. Respond ONLY with a JSON list of strings, no explanations, no extra text, no context, no labels, no markdown, no comments.",
+        "summary": "Extract a professional summary from the resume text. Respond ONLY with a string of 2-3 sentences, no explanations, no extra text, no context, no labels, no markdown, no comments.",
+    }
+    
+    result = {}
+    for field, prompt in fields.items():
+        full_prompt = f"{prompt}\n\nResume Text:\n{resume_text}\n\nOutput:"
+        response = llama3_infer(full_prompt, temperature=0.1)
+        
+        # Clean response
+        response = response.strip().replace('"', '').replace("'", "")
+        
+        # Special handling for skills
+        if field == "skills":
+            try:
+                if response.startswith('[') and response.endswith(']'):
+                    skills = json.loads(response)
+                else:
+                    skills = [s.strip() for s in response.split(',') if s.strip()]
+                result[field] = skills
+            except:
+                result[field] = []
+        else:
+            result[field] = response if response and response != 'N/A' else ""
+    
+    # Set default values for missing complex fields
+    result['degree'] = []
+    result['universities'] = []
+    result['years_experience'] = ""
+    result['experiences'] = []
 
     # --- Regex-based fallback for critical fields ---
     # Email
