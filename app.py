@@ -14,21 +14,25 @@ from PIL import Image
 from streamlit_extras.stylable_container import stylable_container
 
 from backend import (
-    hash_password, hash_file,extract_text_from_file,
-    generate_wordcloud,get_table_download_link,
+    hash_password, hash_file, extract_text_from_file,
+    generate_wordcloud, get_table_download_link,
     insert_resume_data, get_resume_score,
-    validate_user,register_user,get_candidate_data,
+    validate_user, register_user, get_candidate_data,
     get_stats
 )
-from model import (llama3_extract_resume_info, 
-                   bilstm_score_resume,
-                   llama3_infer,extract_first_json)
+from model import (
+    llama3_extract_resume_info, bilstm_score_resume,
+    llama3_infer, extract_first_json
+)
 
-def load_lottieurl(url, timeout=10):
-    r = requests.get(url)
-    if r.status_code != 200:
+def load_lottieurl(url):
+    try:
+        r = requests.get(url, timeout=5)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except Exception:
         return None
-    return r.json()
 
 def gradient_text(text,color1,color2):
     return f"""
