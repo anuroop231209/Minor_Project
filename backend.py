@@ -25,6 +25,19 @@ DB_CONFIG = {
     'cursorclass': pymysql.cursors.DictCursor
 }
 
+#---Database Connection and utilities---
+@contextlib.contextmanager
+def db_connection():
+    with db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            yield cursor
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
 
        
 #PDF and Image Processing
