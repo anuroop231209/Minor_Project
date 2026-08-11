@@ -63,7 +63,14 @@ def setup_database():
                 username VARCHAR(255) UNIQUE NOT NULL,
                 password_hash VARCHAR(255) NOT NULL
             );
-        """)            
+        """)     
+
+#Initialize database on import
+setup_database()
+
+# --- Security Utilities ---
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
        
 #PDF and Image Processing
