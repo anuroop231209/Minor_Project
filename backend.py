@@ -1,3 +1,15 @@
+import os
+import io
+import base64
+import hashlib
+import datetime
+import contextlib
+import pymysql
+import pandas as pd
+from PIL import Image
+from wordcloud import WordCloud
+from PyPDF2 import PdfReader
+from typing import Optional, Tuple, Dict, Any, List
 
 # --- Configuration ---
 DB_CONFIG = {
