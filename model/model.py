@@ -495,3 +495,15 @@ class ResumeDataset(Dataset):
 
     def _len_(self) -> int:
         return len(self.df)        
+    
+    def __getitem__(self, index: int):
+        tokens = [
+            self.vocab.get(word, self.vocab["<UNK>"])
+            for word in str(self.texts.iloc[index]).split()
+        ]
+        tokens = tokens[: self.max_len]
+        tokens += [self.vocab["<PAD>"]] * (self.max_len - len(tokens))
+        return (
+            torch.tensor(tokens, dtype=torch.long),
+            torch.tensor(self.scores[index], dtype=torch.float32),
+        ) 
