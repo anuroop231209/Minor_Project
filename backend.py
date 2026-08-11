@@ -1,19 +1,3 @@
-from __future__ import annotations
-
-import base64
-import contextlib
-import hashlib
-import html
-import io
-import os
-import re
-from pathlib import Path
-from typing import Any, Dict, Iterator, Tuple
-
-import pandas as pd
-import pymysql
-from PIL import Image, ImageFilter
-from wordcloud import WordCloud
 
 # --- Configuration ---
 DB_CONFIG = {
@@ -204,20 +188,6 @@ def extract_text_from_file(file_path: str) -> str:
             raise RuntimeError(f"Image extraction failed: {str(e)}")
     else:
         raise RuntimeError("Unsupported file type")
-
-# --- Visualization Utilities ---
-def generate_wordcloud(resume_text: str) -> Image.Image:
-    wordcloud = WordCloud(
-        width=800,
-        height=400,
-        background_color='white',
-        collocations=False
-    ).generate(resume_text)
-
-    buf = io.BytesIO()
-    wordcloud.to_image().save(buf, format='PNG')
-    buf.seek(0)
-    return Image.open(buf)
 
 # --- Data Export Utilities ---
 def get_table_download_link(df: pd.DataFrame, filename: str, text: str) -> str:
