@@ -492,3 +492,6 @@ class ResumeDataset(Dataset):
             for word in str(text).split():
                 if word not in self.vocab:
                     self.vocab[word] = len(self.vocab)
+
+    def _len_(self) -> int:
+        return len(self.df)        
