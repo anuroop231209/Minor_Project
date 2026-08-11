@@ -16,31 +16,7 @@ from PIL import Image, ImageFilter
 from wordcloud import WordCloud
 
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-DB_NAME = os.getenv("DB_NAME", "candidate")
-if not re.fullmatch(r"[A-Za-z0-9_]+", DB_NAME):
-    raise ValueError("DB_NAME may contain only letters, numbers, and underscores")
-
-# Environment variables override the local-development defaults supplied with
-# the original project. For deployment, set DB_PASSWORD rather than committing
-# a real password to source control.
-DB_CONFIG: Dict[str, Any] = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": int(os.getenv("DB_PORT", "3306")),
-    "user": os.getenv("DB_USER", "root"),
-    "password": os.getenv("DB_PASSWORD", "azer8569"),
-    "db": DB_NAME,
-    "charset": "utf8mb4",
-    "cursorclass": pymysql.cursors.DictCursor,
-    "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5")),
-}
-_DATABASE_READY = False 
-_DATABASE_ERROR: Exception | None = None
-
-        
+       
 #PDF and Image Processing
 def extract_text_from_pdf(file_path: str) -> str:
     try:
