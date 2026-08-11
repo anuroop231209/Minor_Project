@@ -93,7 +93,6 @@ def hash_file(file_path: str) -> str:
         
 #PDF and Image Processing
 
-
 def extract_text_from_file(file_path: str) -> str:
     import cv2
     import numpy as np
